@@ -145,9 +145,11 @@
         <p class="prompt-note" id="prompt-note"></p>
 
         <form id="answer-form" class="answer-form" autocomplete="off">
-          <input id="answer-input" type="text" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Type your answer…" aria-label="Your answer" maxlength="80">
+          <input id="answer-input" type="text" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Type your answer…" aria-label="Your answer" maxlength="80"
+            role="combobox" aria-autocomplete="list" aria-controls="suggest" aria-expanded="false">
           <button type="submit" class="btn btn-primary dive-btn">Dive <span aria-hidden="true">↓</span></button>
         </form>
+        <div class="suggest" id="suggest" role="listbox" aria-label="Autofill suggestions" hidden></div>
         <div class="feedback" id="feedback" role="status" aria-live="polite"></div>
         <div class="dive-actions">
           <button class="link-btn" id="btn-surface" type="button">Give up on this prompt</button>
@@ -231,6 +233,12 @@
       <li><b>Themed Packs</b>: single-topic dives (movies, food, sport and more).</li>
       <li><b>Archive</b>: replay any past daily dive.</li>
     </ul>
+    <h3>Settings</h3>
+    <label class="toggle">
+      <input type="checkbox" id="opt-autofill">
+      <span class="toggle-track" aria-hidden="true"></span>
+      <span class="toggle-text"><b>Autofill suggestions</b><small>After 3 letters, answers that look like what you're typing appear under the box. Tap one, or press Tab, to fill it in.</small></span>
+    </label>
   </dialog>
 
   <dialog id="modal-stats" class="modal">

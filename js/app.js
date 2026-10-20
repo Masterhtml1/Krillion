@@ -17,6 +17,7 @@
     records: { endlessDepth: 0, endlessPrompts: 0, unlimitedBest: 0, unlimitedPlayed: 0, endlessPlayed: 0 },
     packBest: {},   // packId -> best depth
     seenHelp: false,
+    settings: { autofill: true },
   });
 
   function loadStore() {
@@ -24,7 +25,10 @@
       const raw = JSON.parse(localStorage.getItem(STORE_KEY));
       if (raw && typeof raw === 'object') {
         const d = DEFAULT_STORE();
-        return Object.assign(d, raw, { records: Object.assign(d.records, raw.records || {}) });
+        return Object.assign(d, raw, {
+          records: Object.assign(d.records, raw.records || {}),
+          settings: Object.assign(d.settings, raw.settings || {}),
+        });
       }
     } catch (e) { /* storage unavailable or corrupt: start fresh */ }
     return DEFAULT_STORE();
@@ -380,6 +384,7 @@
     $('#feedback').textContent = '';
     $('#feedback').className = 'feedback';
     $('#reveal').hidden = true;
+    hideSuggestions();
     renderProgress();
     if (dive.mode === 'daily') {
       const e = store.daily[dive.diveNo];
@@ -432,9 +437,59 @@
       void form.offsetWidth;
       form.classList.add('shake');
       input.select();
+      renderSuggestions();
       return;
     }
     lockIn(m.answer, { input: val, fuzzy: m.fuzzy });
+  }
+
+  // ------------------------------------------------------------ autofill --
+
+  let sugItems = [];
+  let sugActive = -1;
+
+  function hideSuggestions() {
+    sugItems = [];
+    sugActive = -1;
+    const box = $('#suggest');
+    box.hidden = true;
+    box.innerHTML = '';
+    const input = $('#answer-input');
+    input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+  }
+
+  function highlightTyped(text, typed) {
+    const i = typed ? text.toLowerCase().indexOf(typed.toLowerCase()) : -1;
+    if (i < 0) return esc(text);
+    return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + typed.length)) + '</mark>' + esc(text.slice(i + typed.length));
+  }
+
+  function renderSuggestions() {
+    const input = $('#answer-input');
+    if (!store.settings.autofill || !dive || dive.phase !== 'answer') { hideSuggestions(); return; }
+    sugItems = K.suggest(currentPrompt(), input.value, 4);
+    if (!sugItems.length) { hideSuggestions(); return; }
+    if (sugActive >= sugItems.length) sugActive = -1;
+    const typed = input.value.trim();
+    const box = $('#suggest');
+    box.innerHTML = '<span class="suggest-label">Autofill</span>' + sugItems.map((s, i) =>
+      '<button type="button" class="sug' + (i === sugActive ? ' active' : '') + '" role="option" id="sug-' + i +
+      '" aria-selected="' + (i === sugActive) + '" data-sug="' + i + '">' + highlightTyped(s.text, typed) + '</button>').join('') +
+      '<span class="sug-hint"><kbd>Tab</kbd> to fill</span>';
+    box.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+    if (sugActive >= 0) input.setAttribute('aria-activedescendant', 'sug-' + sugActive);
+    else input.removeAttribute('aria-activedescendant');
+  }
+
+  function fillSuggestion(i) {
+    const s = sugItems[i];
+    if (!s) return;
+    const input = $('#answer-input');
+    input.value = s.text;
+    hideSuggestions();
+    input.focus({ preventScroll: true });
   }
 
   function lockIn(answer, opts) {
@@ -468,6 +523,7 @@
 
     // Reveal panel
     $('#answer-input').disabled = true;
+    hideSuggestions();
     $('#answer-form').hidden = true;
     $('#btn-surface').parentElement.hidden = true;
     $('.air').hidden = true;
@@ -688,6 +744,7 @@
   }
 
   function renderHelp() {
+    $('#opt-autofill').checked = !!store.settings.autofill;
     $('#tier-table').innerHTML = K.TIERS.slice().reverse().map((t) =>
       '<tr style="--tier:' + t.color + '"><td>' + t.emoji + '</td><td><div class="tn">' + t.name + '</div><div class="tb">' + esc(t.blurb) + '</div></td>' +
       '<td class="tp">' + t.points + ' pts<br><span class="tb">' + fmtNum(t.points * K.METERS_PER_POINT) + ' m</span></td></tr>').join('') +
@@ -737,6 +794,35 @@
   });
 
   $('#answer-form').addEventListener('submit', (ev) => { ev.preventDefault(); submitAnswer(); });
+  $('#answer-input').addEventListener('input', () => { sugActive = -1; renderSuggestions(); });
+  $('#answer-input').addEventListener('keydown', (ev) => {
+    if (!sugItems.length) return;
+    if (ev.key === 'Tab' && !ev.shiftKey) {
+      ev.preventDefault();
+      fillSuggestion(Math.max(0, sugActive));
+    } else if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      const n = sugItems.length;
+      sugActive = ev.key === 'ArrowDown' ? (sugActive + 1) % n : (sugActive <= 0 ? n - 1 : sugActive - 1);
+      renderSuggestions();
+    } else if (ev.key === 'Enter' && sugActive >= 0) {
+      // Fill the highlighted suggestion; the form's submit then sends it.
+      $('#answer-input').value = sugItems[sugActive].text;
+      hideSuggestions();
+    } else if (ev.key === 'Escape') {
+      hideSuggestions();
+    }
+  });
+  $('#suggest').addEventListener('mousedown', (ev) => ev.preventDefault()); // keep focus (and the keyboard) on the input
+  $('#suggest').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-sug]');
+    if (b) fillSuggestion(Number(b.dataset.sug));
+  });
+  $('#opt-autofill').addEventListener('change', (ev) => {
+    store.settings.autofill = ev.target.checked;
+    save();
+    renderSuggestions();
+  });
   $('#btn-surface').addEventListener('click', () => lockIn(null));
   $('#btn-next').addEventListener('click', nextPrompt);
   $('#btn-share').addEventListener('click', () => resultsDive && share(resultsDive));

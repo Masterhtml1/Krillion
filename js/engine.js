@@ -255,6 +255,71 @@
     return best ? { answer: best, fuzzy: true } : null;
   }
 
+  // ------------------------------------------------------------ autofill --
+
+  const SUGGEST_MIN = 3;
+
+  function buildSuggest(prompt) {
+    const list = [];
+    for (const ans of prompt.answers) {
+      for (const alias of ans.aliases) {
+        const norm = normalize(alias);
+        if (norm) list.push({ ans, alias, key: norm.replace(/ /g, ''), spaced: ' ' + norm });
+      }
+    }
+    return list;
+  }
+
+  // Lower is better. Prefix of the whole name, then the start of a later word
+  // ("lund" -> "Norwegian Lundehund"), then a near-typo of a prefix or the name.
+  function suggestScore(e, typed, typedKey, tol) {
+    const tail = e.key.length / 1000;
+    if (e.key.startsWith(typedKey)) return 1 + tail;
+    if (e.spaced.includes(' ' + typed)) return 2 + tail;
+    if (!tol || e.key[0] !== typedKey[0]) return Infinity;
+    let d = tol + 1;
+    for (let len = typedKey.length - 1; len <= typedKey.length + 1; len++) {
+      if (len > 0 && len <= e.key.length) d = Math.min(d, distance(typedKey, e.key.slice(0, len), tol));
+    }
+    return d <= tol ? 3 + d + tail : Infinity;
+  }
+
+  /**
+   * Answers that look like what the player is typing, for autofill. Returns up
+   * to `limit` of { answer, text } where text is the alias to fill in. Nothing is
+   * suggested under three letters or once the input already matches exactly.
+   */
+  function suggest(prompt, input, limit) {
+    limit = limit || 4;
+    const long = (t) => t.replace(/ /g, '').length >= SUGGEST_MIN;
+    const tries = readings(prompt, input).filter(long);
+    if (!tries.length) return [];
+    if (tries.some((t) => matchCore(prompt, t, false))) return [];
+    // Also try without filler words: "the river tha" -> "tha".
+    for (const t of tries.slice()) {
+      const bare = t.split(' ').filter((w) => !STOP.has(w)).join(' ');
+      if (bare !== t && long(bare)) tries.push(bare);
+    }
+    const list = prompt._suggest || (prompt._suggest = buildSuggest(prompt));
+    const best = new Map();
+    for (const typed of tries) {
+      const typedKey = typed.replace(/ /g, '');
+      const tol = typedKey.length >= 7 ? 2 : typedKey.length >= 4 ? 1 : 0;
+      for (const e of list) {
+        const s = suggestScore(e, typed, typedKey, tol);
+        const prev = best.get(e.ans);
+        if (s < Infinity && (!prev || s < prev.score)) best.set(e.ans, { answer: e.ans, text: e.alias, score: s });
+      }
+    }
+    let found = Array.from(best.values());
+    // Typo guesses only when nothing actually starts with what was typed.
+    if (found.some((f) => f.score < 3)) found = found.filter((f) => f.score < 3);
+    return found
+      .sort((a, b) => a.score - b.score || a.text.length - b.text.length)
+      .slice(0, limit)
+      .map(({ answer, text }) => ({ answer, text }));
+  }
+
   // ------------------------------------------------------------- seeding --
 
   function hashString(str) {
@@ -434,7 +499,7 @@
   return {
     TIERS, MISS, ZONES, LANDMARKS, METERS_PER_POINT, PROMPTS_PER_DIVE, SECONDS_PER_PROMPT, MAX_SCORE,
     zoneFor, gaugePos, seaColors,
-    normalize, keysFor, distance, match,
+    normalize, keysFor, distance, match, suggest,
     hashString, rng, shuffle, rarityPct, formatPct,
     packs, prompts, byId, addPack, topAnswers,
     easternParts, diveNumber, diveDateLabel, msUntilNextDive, dailyPrompts, pickFresh,

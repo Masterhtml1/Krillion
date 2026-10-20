@@ -154,3 +154,32 @@ test('zones and gauge positions', () => {
   assert.equal(K.gaugePos(200), 0.2);
   assert.ok(K.gaugePos(20000) <= 1);
 });
+
+test('autofill suggests answers that look like the input', () => {
+  const europe = promptFor('country in Europe');
+  const texts = (p, s) => K.suggest(p, s).map((x) => x.text);
+  assert.deepEqual(K.suggest(europe, 'sw'), [], 'nothing under three letters');
+  assert.ok(texts(europe, 'swi').includes('Switzerland'));
+  assert.ok(texts(europe, 'swizt').includes('Switzerland'), 'typo in the prefix');
+  assert.ok(texts(europe, 'north').includes('North Macedonia'));
+  assert.deepEqual(K.suggest(europe, 'Switzerland'), [], 'an exact answer needs no autofill');
+  assert.ok(K.suggest(europe, 'a').length === 0 && K.suggest(europe, 'zzzzzz').length === 0);
+  const tennis = promptFor('tennis player');
+  assert.ok(texts(tennis, 'rubl').includes('Andrey Rublev'), 'start of a later word');
+  const river = promptFor('Name a river');
+  assert.ok(texts(river, 'the river tha').includes('Thames'), 'filler words ignored');
+});
+
+test('autofill returns at most four distinct answers, each one accepted', () => {
+  for (const p of K.prompts) {
+    for (const probe of ['the', 'sta', 'mar', 'cha', 'bla']) {
+      const got = K.suggest(p, probe);
+      assert.ok(got.length <= 4);
+      assert.equal(new Set(got.map((s) => s.answer)).size, got.length, p.id + ' duplicate answers for ' + probe);
+      for (const s of got) {
+        const m = K.match(p, s.text);
+        assert.ok(m && m.answer === s.answer, p.id + ': filling "' + s.text + '" must count as that answer');
+      }
+    }
+  }
+});

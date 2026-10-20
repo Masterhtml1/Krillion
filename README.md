@@ -8,6 +8,7 @@ Every prompt asks for one answer, like *"Name a country with the letter D in its
 
 - A **Daily Dive** is **7 prompts**, the same for everyone on the same day. A new dive starts at midnight US Eastern time (dive #1 was 16 July 2026).
 - You get **25 seconds of air** per prompt. If an answer isn't on the list, keep trying until the clock runs out.
+- **Autofill:** after 3 letters, up to four accepted answers that look like what you're typing appear under the box. That includes names that start with your letters, names with a later word that starts with them ("lund" → Norwegian Lundehund), and near-typos. Tap a suggestion or press <kbd>Tab</kbd> to fill it in. <kbd>↑</kbd>/<kbd>↓</kbd> then <kbd>Enter</kbd> fills and submits. Suggestions never show the tier. You can turn autofill off under **How to play → Settings**.
 - Each accepted answer falls into one of six rarity tiers:
 
   | Tier | Points | Depth |
@@ -81,7 +82,8 @@ Prompts live in `js/packs/*.js`. Each row has this shape:
   { surnames: true }],                // optional matching options
 ```
 
-- Separate answers with `,`. Use `/` between aliases of the same answer, for example `Kiwi/Kiwifruit`.
+- Separate answers with `,`. Use `/` between aliases of the same answer, for example `Kiwi/Kiwifruit`. Names can't contain a comma. If a name really has a slash in it, write it with the fraction slash `⁄`, as in `AC⁄DC/ACDC`.
+- Check one pack on its own with `node tests/check-pack.js js/packs/food.js`. It prints per-tier counts and flags clashing or unmatched aliases.
 - Matching ignores case, accents, punctuation, a leading "the/a/an" and plurals, and it forgives small typos.
 - These options are available:
   - `surnames` accepts a unique last name, so "Rublev" matches "Andrey Rublev".
